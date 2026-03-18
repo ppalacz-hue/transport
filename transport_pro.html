@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Transport PRO</title>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode/dist/JsBarcode.all.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<style>
+body { font-family: Arial; padding: 20px; }
+input, button, textarea { padding: 10px; margin: 5px; width: 100%; max-width: 400px; }
+.kod { padding: 5px; border-bottom: 1px solid #ccc; display: flex; justify-content: space-between; align-items: center; }
+button.usun { background: red; color: white; border: none; }
+</style>
+</head>
+<body>
+
+<h2>📦 Przygotowanie transportu</h2>
+
+<input type="text" id="scanInput" placeholder="Skanuj kod..." autofocus />
+<button onclick="resetListy()">🔄 Reset listy</button>
+<button onclick="zamknijTransport()">Zamknij i generuj QR</button>
+
+<div id="lista"></div>
+
+<hr>
+
+<h2>📥 Odbiór transportu</h2>
+
+<button onclick="startScan()">📱 Skanuj QR kamerą</button>
+<div id="reader" style="width:300px;"></div>
+
+<textarea id="qrInput" placeholder="Lub wklej QR"></textarea><br>
+<button onclick="pokazListe()">Pokaż listę</button>
+
+<div id="listaQR"></div>
+
+<script>
+let lista = [];
+
+// 🔊 dźwięk
+function beep() {
+    let audio = new Audio("https://www.soundjay.com/buttons/sounds/beep-07.mp3");
+    audio.play();
+}
+
+// 🔢 numer transportu
+function generujNumer() {
+    let d = new Date();
+    return "T-" + d.getFullYear() +
+        String(d.getMonth()+1).padStart(2,'0') +
+        String(d.getDate()).padStart(2,'0') + "-" +
+        String(d.getHours()).padStart(2,'0') +
+        String(d.getMinutes()).padStart(2,'0');
+}
+
+document.getElementById("scanInput").addEventListener("keypress", function(e) {
+    if (e.key === "Enter") {
+        let kod = this.value.trim();
+        if (kod && !lista.includes(kod)) {
+            lista.push(kod);
+            beep();
+        }
+        this.value = "";
+        pokazListeNaZywo();
+    }
+});
+
+function resetListy() {
+    if (confirm("Wyczyścić listę?")) {
+        lista = [];
+        pokazListeNaZywo();
+    }
+}
+
+function usunKod(i) {
+    lista.splice(i,1);
+    pokazListeNaZywo();
+}
+
+function pokazListeNaZywo() {
+    let div = document.getElementById("lista");
+    div.innerHTML = "<h3>Lista ("+lista.length+")</h3>";
+
+    lista.forEach((k,i)=>{
+        div.innerHTML += `
+        <div class="kod">
+            ${k}
+            <button class="usun" onclick="usunKod(${i})">X</button>
+        </div>`;
+    });
+}
+
+function zamknijTransport() {
+    if (lista.length === 0) return;
+
+    let nr = generujNumer();
+    let dane = nr + "\n" + lista.join("\n");
+
+    let w = window.open("", "_blank");
+
+    w.document.write(`
+    <html><body style="text-align:center;font-family:Arial">
+    <h2>${nr}</h2>
+    <div id="qrcode"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"><\/script>
+    <script>
+    QRCode.toCanvas("${dane.replace(/\n/g,"\\n")}",{width:300},function(e,c){
+        document.getElementById("qrcode").appendChild(c);
+    });
+    setTimeout(()=>window.print(),500);
+    <\/script>
+    </body></html>
+    `);
+
+    w.document.close();
+}
+
+// 📱 skan QR kamerą
+function startScan() {
+    const html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        qrCodeMessage => {
+            document.getElementById("qrInput").value = qrCodeMessage;
+            html5QrCode.stop();
+            pokazListe();
+        }
+    );
+}
+
+// 📥 odbiór + generowanie Code128
+function pokazListe() {
+    let text = document.getElementById("qrInput").value;
+    let linie = text.split("\n");
+
+    let div = document.getElementById("listaQR");
+    div.innerHTML = "<h3>"+linie[0]+"</h3>";
+
+    linie.forEach((l,i)=>{
+        if(i>0 && l.trim()!==""){
+            let id = "bc"+i;
+            div.innerHTML += `
+            <div class="kod">
+                ${l}
+                <svg id="${id}"></svg>
+            </div>`;
+            setTimeout(()=>{
+                JsBarcode("#"+id, l, {format:"CODE128"});
+            },10);
+        }
+    });
+}
+</script>
+
+</body>
+</html>
