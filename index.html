@@ -4,26 +4,11 @@
 <meta charset="UTF-8">
 <title>Transport Multi-Magazyn</title>
 
-<!-- Firebase SDK -->
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-import { getFirestore, collection, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-const firebaseConfig = {
-  apiKey: "AIzaSyAJhqaKJZlTsrp3oDLytGBBF63nN083P2o",
-  authDomain: "transportsystem-d8989.firebaseapp.com",
-  projectId: "transportsystem-d8989",
-  storageBucket: "transportsystem-d8989.firebasestorage.app",
-  messagingSenderId: "32173202438",
-  appId: "1:32173202438:web:15fbec63c83fe043ba3787",
-  measurementId: "G-SP680XJ11W"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-window.db = db;
-</script>
-
+<!-- Biblioteki -->
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode/dist/JsBarcode.all.min.js"></script>
 <script src="https://unpkg.com/html5-qrcode"></script>
@@ -31,45 +16,31 @@ window.db = db;
 <style>
 body{margin:0;font-family:Arial;background:#0f1c22;color:white;text-align:center;}
 .header{display:flex;background:#ff5a00;padding:15px;font-size:20px;font-weight:bold;justify-content:center;}
-.button-select, .button-round{
-  padding:15px 25px;
-  margin:15px;
-  cursor:pointer;
-  background:#1c2b33;
-  color:white;
-  border:none;
-  border-radius:15px;
-  font-size:18px;
-  transition:0.3s;
-}
-.button-select:hover, .button-round:hover{background:#ff5a00;}
+.button-select,.button-round{padding:15px 25px;margin:15px;cursor:pointer;background:#1c2b33;color:white;border:none;border-radius:15px;font-size:18px;transition:.3s;}
+.button-select:hover,.button-round:hover{background:#ff5a00;}
 .section{display:none;padding:20px;}
 .section.active{display:block;}
 input,textarea{padding:10px;margin:5px;width:250px;}
-button{padding:10px;margin:5px;cursor:pointer;}
 .list{margin-top:20px;}
 .item{display:flex;justify-content:space-between;border-bottom:1px solid #333;padding:5px;align-items:center;}
 .item svg{margin-left:10px;}
-.ok{color:lightgreen;}
-.brak{color:red;}
+#qrCanvas{background:white;margin-top:10px;padding:10px;}
 .center-btn{display:flex;justify-content:center;}
 </style>
 </head>
-
 <body>
-
 <div class="header">🚚 SYSTEM TRANSPORTOWY</div>
 
-<!-- Ekran wyboru procesu -->
+<!-- Panel startowy -->
 <div id="selectProcess" class="section active">
-  <h2>Wybierz proces:</h2>
-  <div class="center-btn">
-    <button class="button-select" onclick="showProcess('prep')">📦 Przygotowanie transportu</button>
-    <button class="button-select" onclick="showProcess('odbior')">📥 Odbiór transportu</button>
-  </div>
+<h2>Wybierz proces:</h2>
+<div class="center-btn">
+<button class="button-select" onclick="showProcess('prep')">📦 Przygotowanie transportu</button>
+<button class="button-select" onclick="showProcess('odbior')">📥 Odbiór transportu</button>
+</div>
 </div>
 
-<!-- Przygotowanie transportu -->
+<!-- Przygotowanie -->
 <div id="prep" class="section">
 <h3>Przygotowanie transportu</h3>
 <input id="magZ" placeholder="Magazyn Z">
@@ -77,168 +48,145 @@ button{padding:10px;margin:5px;cursor:pointer;}
 <input id="auto" placeholder="Nr auta"><br>
 <input id="scan" placeholder="Skanuj kod palety..." autofocus>
 <button class="button-round" onclick="resetPrep()">Reset</button>
-<button class="button-round" onclick="closeTransport()">Zamknij i QR</button>
-<button class="button-round" onclick="printPalets()">🧾 Drukuj palety</button>
-<div class="center-btn"><button class="button-round" onclick="backToMenu()">⬅️ Powrót do panelu głównego</button></div>
+<button class="button-round" onclick="closeTruck()">Zamknij Truck / Generuj QR</button>
+<button class="button-round" onclick="printTransport()">🧾 Wydruk</button>
+<div class="center-btn"><button class="button-round" onclick="backToMenu()">⬅️ Panel główny</button></div>
 <div id="lista" class="list"></div>
-<div id="grupy"></div>
+<h3>QR transportu</h3>
+<canvas id="qrCanvas" width="200" height="200"></canvas>
+<div id="qrInfo"></div>
 </div>
 
-<!-- Odbiór transportu -->
+<!-- Odbiór -->
 <div id="odbior" class="section">
 <h3>Odbiór transportu</h3>
 <button class="button-round" onclick="scanQR()">📱 Skanuj QR</button>
 <button class="button-round" onclick="resetOdbior()">Reset</button>
 <button class="button-round" onclick="exportExcel()">📊 Excel</button><br>
-<textarea id="qr" placeholder="Lub wklej ID transportu"></textarea>
+<textarea id="qrInput" placeholder="Wklej lub zeskanuj QR"></textarea>
 <button class="button-round" onclick="showOdbior()">Pokaż</button>
-<div class="center-btn"><button class="button-round" onclick="backToMenu()">⬅️ Powrót do panelu głównego</button></div>
+<div class="center-btn"><button class="button-round" onclick="backToMenu()">⬅️ Panel główny</button></div>
 <div id="odbiorLista"></div>
 <div id="podsumowanie"></div>
 <div id="reader"></div>
-<h3>Statystyki</h3>
-<div id="stats"></div>
 </div>
 
 <script>
-let lista=[], transportId="", odebraneSet=new Set();
+// Firebase
+const firebaseConfig={
+apiKey:"AIzaSyAJhqaKJZlTsrp3oDLytGBBF63nN083P2o",
+authDomain:"transportsystem-d8989.firebaseapp.com",
+projectId:"transportsystem-d8989",
+storageBucket:"transportsystem-d8989.firebasestorage.app",
+messagingSenderId:"32173202438",
+appId:"1:32173202438:web:15fbec63c83fe043ba3787"
+};
+firebase.initializeApp(firebaseConfig);
+const db=firebase.firestore();
 
-// --- Powrót do panelu głównego ---
+// Zmienne
+let palety=[], transportId="", odebraneSet=new Set();
+
+// Panel startowy
 function backToMenu(){
   document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
   document.getElementById("selectProcess").classList.add("active");
-  // wyczyść pola i listy w obu modułach
   resetPrep();
   resetOdbior();
 }
-
-// --- Wybor procesu ---
 function showProcess(id){
   document.getElementById('selectProcess').classList.remove('active');
   document.getElementById(id).classList.add('active');
 }
 
-// --- Przygotowanie ---
-scan.addEventListener("keypress", e=>{
+// Przygotowanie
+document.getElementById("scan").addEventListener("keypress", e=>{
   if(e.key==="Enter"){
-    let v=scan.value.trim();
-    if(v && !lista.includes(v)){
-      lista.push(v);
-    }
-    scan.value="";
+    const k=document.getElementById("scan").value.trim();
+    if(k!="" && !palety.includes(k)) palety.push(k);
+    document.getElementById("scan").value="";
     renderPrep();
   }
 });
 
 function renderPrep(){
-  let html="", grupy={};
-  lista.forEach((k,i)=>{
-    let prefix=k.split("-")[0];
-    grupy[prefix]=(grupy[prefix]||0)+1;
-    html+=`<div class="item">${k} <button onclick="removePrep(${i})">X</button></div>`;
+  let html="";
+  palety.forEach((k,i)=>{
+    html+=`<div class="item">${k} <button onclick="removePaleta(${i})">X</button></div>`;
   });
-  document.getElementById("lista").innerHTML="<b>Palety: "+lista.length+"</b>"+html;
-  let g=""; for(let x in grupy) g+=x+": "+grupy[x]+"<br>";
-  document.getElementById("grupy").innerHTML=g;
+  document.getElementById("lista").innerHTML="<b>Palet: "+palety.length+"</b>"+html;
 }
-function removePrep(i){ lista.splice(i,1); renderPrep(); }
-function resetPrep(){ lista=[]; renderPrep(); }
+function removePaleta(i){palety.splice(i,1); renderPrep();}
+function resetPrep(){palety=[]; renderPrep();document.getElementById("magZ").value="";document.getElementById("magDo").value="";document.getElementById("auto").value="";document.getElementById("scan").value="";document.getElementById("qrCanvas").getContext('2d').clearRect(0,0,200,200);document.getElementById("qrInfo").innerHTML="";}
 
-function genTransportId(){
-  let d=new Date();
-  return "T-"+d.getFullYear()+(""+(d.getMonth()+1)).padStart(2,"0")+(""+d.getDate()).padStart(2,"0")+"-"+(""+d.getHours()).padStart(2,"0")+(""+d.getMinutes()).padStart(2,"0");
-}
-
-async function closeTransport(){
-  if(!magZ.value || !magDo.value || !auto.value || lista.length===0){
-    alert("Wypełnij magazyny, auto i zeskanuj przynajmniej 1 paletę!");
-    return;
-  }
-  transportId=genTransportId();
-  const data={id: transportId, magazynZ: magZ.value, magazynDo: magDo.value, auto: auto.value, palety: lista, created: Date.now()};
+// Zamknięcie trucka / generacja QR
+async function closeTruck(){
+  const auto=document.getElementById("auto").value.trim();
+  const magZ=document.getElementById("magZ").value.trim();
+  const magDo=document.getElementById("magDo").value.trim();
+  if(auto=="" || palety.length===0){alert("Wpisz auto i zeskanuj palety!"); return;}
+  transportId="T-"+Date.now();
+  const data={auto:auto,palety:palety};
   await db.collection("transports").doc(transportId).set(data);
 
-  let w=window.open("");
-  w.document.write(`<h2>${transportId}</h2><canvas id="q"></canvas>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"><\/script>
-  <script>QRCode.toCanvas(document.getElementById('q'), "${transportId}");<\/script>`);
+  // QR generuje JSON z numerem auta i listą palet
+  QRCode.toCanvas(document.getElementById("qrCanvas"), JSON.stringify(data), {width:200,color:{dark:"#000000",light:"#ffffff"}});
+  document.getElementById("qrInfo").innerHTML=`Auto: ${auto} | Palet: ${palety.length} | Mag: ${magZ} → ${magDo}`;
 }
 
-// Druk palet
-function printPalets(){
-  let w=window.open("");
-  lista.forEach(k=>{
-    w.document.write(`<div style="page-break-after:always;text-align:center">
-      <h2>${k}</h2>
-      <svg id="b${k}"></svg>
-    </div>`);
-  });
-  w.document.write(`<script src="https://cdn.jsdelivr.net/npm/jsbarcode/dist/JsBarcode.all.min.js"><\/script>
-    <script>${lista.map(k=>`JsBarcode("#b${k}","${k}")`).join(";")}<\/script>`);
+// Wydruk
+function printTransport(){
+  const printContents=document.getElementById("prep").innerHTML;
+  const original=document.body.innerHTML;
+  document.body.innerHTML=printContents;
+  window.print();
+  document.body.innerHTML=original;
+  location.reload();
 }
 
-// --- Odbiór ---
+// Odbiór
 function scanQR(){
   const qrScanner=new Html5Qrcode("reader");
   qrScanner.start({facingMode:"environment"},{fps:10,qrbox:250}, msg=>{
     qrScanner.stop();
-    qr.value=msg;
+    document.getElementById("qrInput").value=msg;
     showOdbior();
   });
 }
 
-async function showOdbior(){
-  let id=qr.value.trim();
-  if(!id) return alert("Podaj ID transportu!");
-  const docSnap=await db.collection("transports").doc(id).get();
-  if(!docSnap.exists) return alert("Transport nie znaleziony");
-  const data=docSnap.data();
-  transportId=data.id;
-  odebraneSet.clear();
-
-  let palety = data.palety.sort();
-  let html="";
-  palety.forEach(p=>{
-    html+=`<div class="item">
-      <input type="checkbox" onchange="check('${p}',this)">
-      ${p} <svg id="bc${p}"></svg>
-    </div>`;
-  });
-  odbiorLista.innerHTML=html;
-  palety.forEach(p=>setTimeout(()=>JsBarcode(`#bc${p}`,p,{format:"CODE128"}),10));
-  podsum();
+function showOdbior(){
+  const val=document.getElementById("qrInput").value.trim();
+  if(val==""){alert("Wklej lub zeskanuj QR"); return;}
+  try{
+    const data=JSON.parse(val);
+    palety=data.palety;
+    let html="";
+    palety.sort().forEach(p=>{
+      html+=`<div class="item"><input type="checkbox" onchange="check('${p}',this)">${p} <svg id="bc${p}"></svg></div>`;
+    });
+    document.getElementById("odbiorLista").innerHTML=html;
+    palety.forEach(p=>setTimeout(()=>JsBarcode(`#bc${p}`,p,{format:"CODE128"}),10));
+    odebraneSet.clear();
+    podsum();
+  }catch(e){alert("Niepoprawny QR");}
 }
 
-function check(k,el){
-  if(el.checked) odebraneSet.add(k);
-  else odebraneSet.delete(k);
-  podsum();
-}
-
-function podsum(){
-  let total=document.querySelectorAll("#odbiorLista .item").length;
-  let ok=odebraneSet.size;
-  podsumowanie.innerHTML=`OK: ${ok} / ${total} | BRAK: ${total-ok}`;
-}
-
-function resetOdbior(){
-  qr.value=""; odbiorLista.innerHTML=""; podsumowanie.innerHTML="";
-  odebraneSet.clear();
-}
+function check(k,el){if(el.checked) odebraneSet.add(k);else odebraneSet.delete(k);podsum();}
+function podsum(){const total=document.querySelectorAll("#odbiorLista .item").length;const ok=odebraneSet.size;document.getElementById("podsumowanie").innerHTML=`OK: ${ok} / ${total} | BRAK: ${total-ok}`;}
+function resetOdbior(){document.getElementById("qrInput").value="";document.getElementById("odbiorLista").innerHTML="";document.getElementById("podsumowanie").innerHTML="";odebraneSet.clear();}
 
 function exportExcel(){
-  if(!transportId) return alert("Brak transportu");
-  let csv="Transport;Paleta;Status\n";
+  if(!palety || palety.length===0){alert("Brak transportu"); return;}
+  let csv="Auto;Paleta;Status\n";
   document.querySelectorAll("#odbiorLista .item").forEach(el=>{
     let kod=el.querySelector("input").nextSibling.textContent.trim();
     let status=el.querySelector("input").checked?"OK":"BRAK";
-    csv+=`${transportId};${kod};${status}\n`;
+    csv+=`${document.getElementById("auto").value};${kod};${status}\n`;
   });
-  let data=new Date().toISOString().slice(0,10);
-  let blob=new Blob([csv],{type:"text/csv"});
-  let a=document.createElement("a");
+  const blob=new Blob([csv],{type:"text/csv"});
+  const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
-  a.download=`${data}_${transportId}.csv`;
+  a.download=`Transport_${Date.now()}.csv`;
   a.click();
 }
 </script>
