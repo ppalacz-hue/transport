@@ -8,7 +8,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-<!-- Biblioteki -->
+<!-- Biblioteki QR i Barcode -->
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode/dist/JsBarcode.all.min.js"></script>
 <script src="https://unpkg.com/html5-qrcode"></script>
@@ -28,6 +28,7 @@ input,textarea{padding:10px;margin:5px;width:250px;}
 </style>
 </head>
 <body>
+
 <div class="header">🚚 SYSTEM TRANSPORTOWY</div>
 
 <!-- Panel startowy -->
@@ -39,7 +40,7 @@ input,textarea{padding:10px;margin:5px;width:250px;}
 </div>
 </div>
 
-<!-- Przygotowanie -->
+<!-- Przygotowanie transportu -->
 <div id="prep" class="section">
 <h3>Przygotowanie transportu</h3>
 <input id="magZ" placeholder="Magazyn Z">
@@ -48,13 +49,12 @@ input,textarea{padding:10px;margin:5px;width:250px;}
 <input id="scan" placeholder="Skanuj kod palety..." autofocus>
 <button class="button-round" onclick="resetPrep()">Reset</button>
 <button class="button-round" onclick="closeTruck()">Zamknij Truck / Generuj QR</button>
-<button class="button-round" onclick="printTransport()">🧾 Wydruk</button>
 <button class="button-round" onclick="printLabels()">🏷️ Druk opisówek palet</button>
 <div class="center-btn"><button class="button-round" onclick="backToMenu()">⬅️ Panel główny</button></div>
 <div id="lista" class="list"></div>
 </div>
 
-<!-- Odbiór -->
+<!-- Odbiór transportu -->
 <div id="odbior" class="section">
 <h3>Odbiór transportu</h3>
 <button class="button-round" onclick="scanQR()">📱 Skanuj QR</button>
@@ -69,82 +69,106 @@ input,textarea{padding:10px;margin:5px;width:250px;}
 </div>
 
 <script>
-// Firebase
-const firebaseConfig={
-apiKey:"API_KEY_HERE",
-authDomain:"PROJECT.firebaseapp.com",
-projectId:"PROJECT",
-storageBucket:"PROJECT.appspot.com",
-messagingSenderId:"SENDER_ID",
-appId:"APP_ID"
+// 🔹 Firebase config (Twój projekt)
+const firebaseConfig = {
+  apiKey: "AIzaSyAJhqaKJZlTsrp3oDLytGBBF63nN083P2o",
+  authDomain: "transportsystem-d8989.firebaseapp.com",
+  projectId: "transportsystem-d8989",
+  storageBucket: "transportsystem-d8989.firebasestorage.app",
+  messagingSenderId: "32173202438",
+  appId: "1:32173202438:web:15fbec63c83fe043ba3787",
+  measurementId: "G-SP680XJ11W"
 };
+
 firebase.initializeApp(firebaseConfig);
-const db=firebase.firestore();
+const db = firebase.firestore();
 
-// Zmienne
-let palety=[], transportId="", odebraneSet=new Set();
+// 🔹 Zmienne globalne
+let palety = [], transportId = "", odebraneSet = new Set();
 
-// Panel startowy
-function backToMenu(){document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));document.getElementById("selectProcess").classList.add("active");resetPrep();resetOdbior();}
-function showProcess(id){document.getElementById('selectProcess').classList.remove('active');document.getElementById(id).classList.add('active');}
+// 🔹 Panel startowy
+function backToMenu(){
+  document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
+  document.getElementById("selectProcess").classList.add("active");
+  resetPrep();
+  resetOdbior();
+}
+function showProcess(id){
+  document.getElementById('selectProcess').classList.remove('active');
+  document.getElementById(id).classList.add('active');
+}
 
-// Przygotowanie
+// 🔹 Przygotowanie transportu
 document.getElementById("scan").addEventListener("keypress", e=>{
   if(e.key==="Enter"){
-    const k=document.getElementById("scan").value.trim();
-    if(k!="" && !palety.includes(k)) palety.push(k);
-    document.getElementById("scan").value="";
+    const k = document.getElementById("scan").value.trim();
+    if(k !== "" && !palety.includes(k)) palety.push(k);
+    document.getElementById("scan").value = "";
     renderPrep();
   }
 });
-function renderPrep(){let html="";palety.forEach((p,i)=>{html+=`<div class="item">${p} <button onclick="removePaleta(${i})">X</button></div>`});document.getElementById("lista").innerHTML="<b>Palet: "+palety.length+"</b>"+html;}
+function renderPrep(){
+  let html="";
+  palety.forEach((p,i)=>{html+=`<div class="item">${p} <button onclick="removePaleta(${i})">X</button></div>`});
+  document.getElementById("lista").innerHTML="<b>Palet: "+palety.length+"</b>"+html;
+}
 function removePaleta(i){palety.splice(i,1);renderPrep();}
-function resetPrep(){palety=[];renderPrep();document.getElementById("magZ").value="";document.getElementById("magDo").value="";document.getElementById("auto").value="";document.getElementById("scan").value="";}
+function resetPrep(){
+  palety=[];
+  renderPrep();
+  document.getElementById("magZ").value="";
+  document.getElementById("magDo").value="";
+  document.getElementById("auto").value="";
+  document.getElementById("scan").value="";
+}
 
-// Zamknięcie trucka i generacja QR + reset panelu
+// 🔹 Zamknięcie Truck + zapis do Firestore + popup QR
 function closeTruck(){
     const auto = document.getElementById("auto").value.trim();
     const magZ = document.getElementById("magZ").value.trim();
     const magDo = document.getElementById("magDo").value.trim();
-    if(auto==""||magZ==""||magDo==""||palety.length===0){alert("Wpisz auto, magazyny i zeskanuj palety!"); return;}
+    if(auto=="" || magZ=="" || magDo=="" || palety.length===0){
+      alert("Wpisz auto, magazyny i zeskanuj palety!"); return;
+    }
 
-    // Otwieramy okno natychmiast
+    // 🔹 Zapis do Firestore
+    transportId = "T-" + Date.now();
+    db.collection("transports").doc(transportId).set({
+      auto: auto,
+      magazynZ: magZ,
+      magazynDo: magDo,
+      palety: palety
+    });
+
+    // 🔹 Nowe okno z QR
     const noweOkno = window.open("", "_blank");
     if(!noweOkno){alert("Popup zablokowany! Zezwól na otwieranie nowych okien."); return;}
 
-    // zapis do Firebase
-    transportId = "T-"+Date.now();
-    db.collection("transports").doc(transportId).set({auto,magazynZ:magZ,magazynDo:magDo,palety});
+    const danePalety = palety.join("\n");
+    const daneId = transportId;
 
-    // generacja QR – tylko lista palet + info do wydruku
-    const dane = palety.join("\n");
     noweOkno.document.write(`
-        <html>
-        <head><title>QR Transport</title></head>
+        <html><head><title>QR Transport</title></head>
         <body style="text-align:center;font-family:Arial;">
         <h2>Auto: ${auto}</h2>
         <p>Magazyn: ${magZ} → ${magDo}</p>
         <p>Ilość palet: ${palety.length}</p>
-        <div id="qrcode"></div>
+        <h3>QR – Lista palet</h3><div id="qrcodePalety"></div>
+        <h3>QR – Transport ID</h3><div id="qrcodeId"></div>
         <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"><\/script>
         <script>
-            QRCode.toCanvas("${dane.replace(/\n/g,"\\n")}", {width:300}, function(err,canvas){
-                document.getElementById("qrcode").appendChild(canvas);
-            });
+        QRCode.toCanvas(document.getElementById("qrcodePalety"), "${danePalety.replace(/\n/g,'\\\\n')}", {width:300});
+        QRCode.toCanvas(document.getElementById("qrcodeId"), "${daneId}", {width:300});
         <\/script>
-        </body>
-        </html>
+        </body></html>
     `);
     noweOkno.document.close();
 
-    // Wyzerowanie panelu przygotowania
+    // 🔹 Reset panelu
     resetPrep();
 }
 
-// Wydruk transportu
-function printTransport(){const printContents=document.getElementById("prep").innerHTML;const original=document.body.innerHTML;document.body.innerHTML=printContents;window.print();document.body.innerHTML=original;location.reload();}
-
-// Druk osobnych etykiet dla palet
+// 🔹 Druk etykiet palet
 function printLabels(){
     if(palety.length===0){alert("Brak palet do drukowania"); return;}
     const auto = document.getElementById("auto").value.trim();
@@ -165,13 +189,67 @@ function printLabels(){
     noweOkno.document.close();
 }
 
-// Odbiór
-function scanQR(){const qrScanner=new Html5Qrcode("reader");qrScanner.start({facingMode:"environment"},{fps:10,qrbox:250},msg=>{qrScanner.stop();document.getElementById("qrInput").value=msg;showOdbior();});}
-function showOdbior(){const val=document.getElementById("qrInput").value.trim();if(val==""){alert("Wklej lub zeskanuj QR");return;}try{let palText=val.split("\n");palety=palText.map(p=>p.trim()).filter(p=>p);let html="";palety.forEach(p=>{html+=`<div class="item"><input type="checkbox" onchange="check('${p}',this)">${p} <svg id="bc${p}"></svg></div>`});document.getElementById("odbiorLista").innerHTML=html;palety.forEach(p=>setTimeout(()=>JsBarcode(`#bc${p}`,p,{format:"CODE128"}),10));odebraneSet.clear();podsum();}catch(e){alert("Niepoprawny QR");}}
-function check(k,el){if(el.checked)odebraneSet.add(k);else odebraneSet.delete(k);podsum();}
-function podsum(){const total=document.querySelectorAll("#odbiorLista .item").length;const ok=odebraneSet.size;document.getElementById("podsumowanie").innerHTML=`OK: ${ok} / ${total} | BRAK: ${total-ok}`;}
-function resetOdbior(){document.getElementById("qrInput").value="";document.getElementById("odbiorLista").innerHTML="";document.getElementById("podsumowanie").innerHTML="";odebraneSet.clear();}
-function exportExcel(){if(!palety||palety.length===0){alert("Brak transportu");return;}let csv="Auto;Paleta;Status\n";document.querySelectorAll("#odbiorLista .item").forEach(el=>{let kod=el.querySelector("input").nextSibling.textContent.trim();let status=el.querySelector("input").checked?"OK":"BRAK";csv+=`${document.getElementById("auto").value};${kod};${status}\n`;});const blob=new Blob([csv],{type:"text/csv"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`Transport_${Date.now()}.csv`;a.click();}
+// 🔹 Odbiór
+function scanQR(){
+    const qrScanner = new Html5Qrcode("reader");
+    qrScanner.start({facingMode:"environment"},{fps:10,qrbox:250},msg=>{
+        qrScanner.stop();
+        document.getElementById("qrInput").value = msg;
+        showOdbior();
+    });
+}
+
+function showOdbior(){
+    const val = document.getElementById("qrInput").value.trim();
+    if(val==""){alert("Wklej lub zeskanuj QR"); return;}
+    try{
+        let palText = val.split("\n");
+        palety = palText.map(p=>p.trim()).filter(p=>p);
+        let html="";
+        palety.forEach(p=>{
+            html+=`<div class="item"><input type="checkbox" onchange="check('${p}',this)">${p} <svg id="bc${p}"></svg></div>`;
+        });
+        document.getElementById("odbiorLista").innerHTML = html;
+        palety.forEach(p=>setTimeout(()=>JsBarcode(`#bc${p}`,p,{format:"CODE128"}),10));
+        odebraneSet.clear();
+        podsum();
+    }catch(e){alert("Niepoprawny QR");}
+}
+
+function check(k,el){
+    if(el.checked) odebraneSet.add(k);
+    else odebraneSet.delete(k);
+    podsum();
+}
+
+function podsum(){
+    const total = document.querySelectorAll("#odbiorLista .item").length;
+    const ok = odebraneSet.size;
+    document.getElementById("podsumowanie").innerHTML = `OK: ${ok} / ${total} | BRAK: ${total-ok}`;
+}
+
+function resetOdbior(){
+    document.getElementById("qrInput").value="";
+    document.getElementById("odbiorLista").innerHTML="";
+    document.getElementById("podsumowanie").innerHTML="";
+    odebraneSet.clear();
+}
+
+function exportExcel(){
+    if(!palety||palety.length===0){alert("Brak transportu"); return;}
+    let csv="Auto;Paleta;Status\n";
+    document.querySelectorAll("#odbiorLista .item").forEach(el=>{
+        let kod = el.querySelector("input").nextSibling.textContent.trim();
+        let status = el.querySelector("input").checked?"OK":"BRAK";
+        csv+=`${document.getElementById("auto").value};${kod};${status}\n`;
+    });
+    const blob = new Blob([csv],{type:"text/csv"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `Transport_${Date.now()}.csv`;
+    a.click();
+}
 </script>
+
 </body>
 </html>
