@@ -1,159 +1,238 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-<meta charset="UTF-8">
-<title>Transport PRO</title>
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-analytics.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
 
+  // Your web app's Firebase configuration
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  const firebaseConfig = {
+    apiKey: "AIzaSyAJhqaKJZlTsrp3oDLytGBBF63nN083P2o",
+    authDomain: "transportsystem-d8989.firebaseapp.com",
+    projectId: "transportsystem-d8989",
+    storageBucket: "transportsystem-d8989.firebasestorage.app",
+    messagingSenderId: "32173202438",
+    appId: "1:32173202438:web:15fbec63c83fe043ba3787",
+    measurementId: "G-SP680XJ11W"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+</script>
+<meta charset="UTF-8">
+<title>Transport Multi-Magazyn</title>
+
+<!-- Biblioteki -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode/dist/JsBarcode.all.min.js"></script>
 <script src="https://unpkg.com/html5-qrcode"></script>
 
 <style>
-body { font-family: Arial; padding: 20px; }
-input, button, textarea { padding: 10px; margin: 5px; width: 100%; max-width: 400px; }
-.kod { padding: 5px; border-bottom: 1px solid #ccc; display: flex; justify-content: space-between; align-items: center; }
-button.usun { background: red; color: white; border: none; }
+body{margin:0;font-family:Arial;background:#0f1c22;color:white;}
+.header{display:flex;background:#ff5a00;padding:15px;font-size:20px;font-weight:bold;}
+.tabs button{background:#1c2b33;color:white;border:none;padding:15px;margin:5px;cursor:pointer;}
+.tabs button.active{background:#ff5a00;}
+.section{display:none;padding:20px;}
+.section.active{display:block;}
+input,textarea{padding:10px;margin:5px;width:250px;}
+button{padding:10px;margin:5px;cursor:pointer;}
+.list{margin-top:20px;}
+.item{display:flex;justify-content:space-between;border-bottom:1px solid #333;padding:5px;}
+.ok{color:lightgreen;}
+.brak{color:red;}
 </style>
 </head>
+
 <body>
 
-<h2>📦 Przygotowanie transportu</h2>
+<div class="header">🚚 SYSTEM TRANSPORTOWY</div>
+<div class="tabs">
+<button onclick="tab('prep')" class="active">📦 Przygotowanie</button>
+<button onclick="tab('odbior')">📥 Odbiór</button>
+</div>
 
-<input type="text" id="scanInput" placeholder="Skanuj kod..." autofocus />
-<button onclick="resetListy()">🔄 Reset listy</button>
-<button onclick="zamknijTransport()">Zamknij i generuj QR</button>
+<!-- ================= PRZYGOTOWANIE ================= -->
+<div id="prep" class="section active">
+<h3>Przygotowanie transportu</h3>
+<input id="magZ" placeholder="Magazyn Z">
+<input id="magDo" placeholder="Magazyn DO">
+<input id="auto" placeholder="Nr auta"><br>
+<input id="scan" placeholder="Skanuj kod palety..." autofocus>
+<button onclick="reset()">Reset</button>
+<button onclick="zamknij()">Zamknij i QR</button>
+<button onclick="drukujPalety()">🧾 Drukuj palety</button>
+<div id="lista" class="list"></div>
+<div id="grupy"></div>
+</div>
 
-<div id="lista"></div>
-
-<hr>
-
-<h2>📥 Odbiór transportu</h2>
-
-<button onclick="startScan()">📱 Skanuj QR kamerą</button>
-<div id="reader" style="width:300px;"></div>
-
-<textarea id="qrInput" placeholder="Lub wklej QR"></textarea><br>
-<button onclick="pokazListe()">Pokaż listę</button>
-
-<div id="listaQR"></div>
+<!-- ================= ODBIÓR ================= -->
+<div id="odbior" class="section">
+<h3>Odbiór transportu</h3>
+<button onclick="scanQR()">📱 Skanuj QR</button>
+<button onclick="resetOdbior()">Reset</button>
+<button onclick="exportExcel()">📊 Excel</button><br>
+<textarea id="qr"></textarea>
+<button onclick="pokaz()">Pokaż</button>
+<div id="odbiorLista"></div>
+<div id="podsumowanie"></div>
+<h3>Statystyki</h3>
+<div id="stats"></div>
+</div>
 
 <script>
-let lista = [];
+// ===== Firebase =====
+const firebaseConfig = YOUR_FIREBASE_CONFIG_HERE;
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
-// 🔊 dźwięk
-function beep() {
-    let audio = new Audio("https://www.soundjay.com/buttons/sounds/beep-07.mp3");
-    audio.play();
+// ===== Tabs =====
+function tab(id){
+  document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("active"));
+  event.target.classList.add("active");
 }
 
-// 🔢 numer transportu
-function generujNumer() {
-    let d = new Date();
-    return "T-" + d.getFullYear() +
-        String(d.getMonth()+1).padStart(2,'0') +
-        String(d.getDate()).padStart(2,'0') + "-" +
-        String(d.getHours()).padStart(2,'0') +
-        String(d.getMinutes()).padStart(2,'0');
-}
+// ===== Przygotowanie =====
+let lista=[], transportNr="";
 
-document.getElementById("scanInput").addEventListener("keypress", function(e) {
-    if (e.key === "Enter") {
-        let kod = this.value.trim();
-        if (kod && !lista.includes(kod)) {
-            lista.push(kod);
-            beep();
-        }
-        this.value = "";
-        pokazListeNaZywo();
-    }
+scan.addEventListener("keypress",e=>{
+  if(e.key==="Enter"){
+    let v=scan.value.trim();
+    if(v && !lista.includes(v)) lista.push(v);
+    scan.value="";
+    render();
+  }
 });
 
-function resetListy() {
-    if (confirm("Wyczyścić listę?")) {
-        lista = [];
-        pokazListeNaZywo();
-    }
+function render(){
+  let div="", grupy={};
+  lista.forEach((k,i)=>{
+    let p=k.split("-")[0];
+    grupy[p]=(grupy[p]||0)+1;
+    div+=`<div class="item">${k} <button onclick="usun(${i})">X</button></div>`;
+  });
+  document.getElementById("lista").innerHTML="<b>Palety: "+lista.length+"</b>"+div;
+  let g=""; for(let x in grupy) g+=x+": "+grupy[x]+"<br>";
+  document.getElementById("grupy").innerHTML=g;
 }
 
-function usunKod(i) {
-    lista.splice(i,1);
-    pokazListeNaZywo();
+function usun(i){ lista.splice(i,1); render(); }
+function reset(){ lista=[]; render(); }
+
+// Numer transportu
+function genNr(){
+  let d=new Date();
+  return "T-"+d.getFullYear()+(""+(d.getMonth()+1)).padStart(2,"0")+(""+d.getDate()).padStart(2,"0")+"-"+(""+d.getHours()).padStart(2,"0")+(""+d.getMinutes()).padStart(2,"0");
 }
 
-function pokazListeNaZywo() {
-    let div = document.getElementById("lista");
-    div.innerHTML = "<h3>Lista ("+lista.length+")</h3>";
-
-    lista.forEach((k,i)=>{
-        div.innerHTML += `
-        <div class="kod">
-            ${k}
-            <button class="usun" onclick="usunKod(${i})">X</button>
-        </div>`;
-    });
-}
-
-function zamknijTransport() {
-    if (lista.length === 0) return;
-
-    let nr = generujNumer();
-    let dane = nr + "\n" + lista.join("\n");
-
-    let w = window.open("", "_blank");
-
-    w.document.write(`
-    <html><body style="text-align:center;font-family:Arial">
-    <h2>${nr}</h2>
-    <div id="qrcode"></div>
-
-    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"><\/script>
-    <script>
-    QRCode.toCanvas("${dane.replace(/\n/g,"\\n")}",{width:300},function(e,c){
-        document.getElementById("qrcode").appendChild(c);
-    });
+// Zamknięcie transportu + zapis w Firebase
+function zamknij(){
+  transportNr=genNr();
+  let dane={
+    id: transportNr,
+    magazynZ: magZ.value,
+    magazynDo: magDo.value,
+    auto: auto.value,
+    palety: lista,
+    created: Date.now()
+  };
+  db.collection("transports").doc(transportNr).set(dane)
+    .then(()=>console.log("Transport zapisany"));
+  
+  let qrData = transportNr; // QR tylko z ID
+  let w=window.open("");
+  w.document.write(`<h2>${transportNr}</h2><canvas id="q"></canvas>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"><\/script>
+  <script>
+    QRCode.toCanvas(document.getElementById("q"), "${qrData}");
     setTimeout(()=>window.print(),500);
-    <\/script>
-    </body></html>
-    `);
-
-    w.document.close();
+  <\/script>`);
 }
 
-// 📱 skan QR kamerą
-function startScan() {
-    const html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: 250 },
-        qrCodeMessage => {
-            document.getElementById("qrInput").value = qrCodeMessage;
-            html5QrCode.stop();
-            pokazListe();
-        }
-    );
+// Druk palet
+function drukujPalety(){
+  let w=window.open("");
+  lista.forEach(k=>{
+    w.document.write(`<div style="page-break-after:always;text-align:center">
+      <h2>${k}</h2>
+      <svg id="b${k}"></svg>
+    </div>`);
+  });
+  w.document.write(`<script src="https://cdn.jsdelivr.net/npm/jsbarcode/dist/JsBarcode.all.min.js"><\/script>
+    <script>${lista.map(k=>`JsBarcode("#b${k}","${k}")`).join(";")}
+  <\/script>`);
 }
 
-// 📥 odbiór + generowanie Code128
-function pokazListe() {
-    let text = document.getElementById("qrInput").value;
-    let linie = text.split("\n");
+// ===== Odbiór =====
+let odebrane=[];
+function scanQR(){
+  const qrScanner=new Html5Qrcode("reader");
+  qrScanner.start({facingMode:"environment"},{fps:10,qrbox:250},
+  msg=>{
+    qrScanner.stop();
+    qr.value=msg;
+    pokaz();
+  });
+}
 
-    let div = document.getElementById("listaQR");
-    div.innerHTML = "<h3>"+linie[0]+"</h3>";
-
-    linie.forEach((l,i)=>{
-        if(i>0 && l.trim()!==""){
-            let id = "bc"+i;
-            div.innerHTML += `
-            <div class="kod">
-                ${l}
-                <svg id="${id}"></svg>
-            </div>`;
-            setTimeout(()=>{
-                JsBarcode("#"+id, l, {format:"CODE128"});
-            },10);
-        }
+function pokaz(){
+  let id = qr.value.trim();
+  if(!id) return;
+  db.collection("transports").doc(id).get().then(doc=>{
+    if(!doc.exists) return alert("Transport nie znaleziony");
+    let t = doc.data();
+    transportNr = t.id;
+    let html="", palety=t.palety;
+    odebrane=[];
+    palety.forEach(p=>{
+      html+=`<div class="item"><input type="checkbox" onchange="check('${p}',this)"> ${p}</div>`;
     });
+    odbiorLista.innerHTML=html;
+    podsumuj();
+  });
+}
+
+function check(k,el){
+  if(el.checked) odebrane.push(k);
+  else odebrane=odebrane.filter(x=>x!==k);
+  podsumuj();
+}
+
+function podsumuj(){
+  let total=document.querySelectorAll("#odbiorLista .item").length;
+  let ok=odebrane.length;
+  podsumowanie.innerHTML=`OK: ${ok} / ${total} | BRAK: ${total-ok}`;
+}
+
+// Reset odbioru
+function resetOdbior(){
+  qr.value=""; odbiorLista.innerHTML=""; podsumowanie.innerHTML="";
+  odebrane=[];
+}
+
+// Eksport do Excel
+function exportExcel(){
+  if(!transportNr) return alert("Brak transportu");
+  let csv="Transport;Paleta;Status\n";
+  document.querySelectorAll("#odbiorLista .item").forEach(el=>{
+    let kod=el.innerText.trim();
+    let status=el.querySelector("input").checked ? "OK":"BRAK";
+    csv+=`${transportNr};${kod};${status}\n`;
+  });
+  let data=new Date().toISOString().slice(0,10);
+  let blob=new Blob([csv],{type:"text/csv"});
+  let a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`${data}_${transportNr}.csv`;
+  a.click();
 }
 </script>
 
